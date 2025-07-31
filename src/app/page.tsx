@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Music, ArrowRight, Loader2, Download, Video, AudioLines } from "lucide-react";
+import { Music, ArrowRight, Loader2, Download, Video, AudioLines, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +38,6 @@ export default function Home() {
   const { toast } = useToast();
   const resultsRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
-  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
   const handleFetch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -259,14 +258,27 @@ export default function Home() {
 
           <aside className="lg:col-span-1">
              <div className="sticky top-24">
-              <Card className="border-dashed border-primary/50">
-                <CardHeader>
-                  <CardTitle className="text-center text-muted-foreground font-normal text-sm tracking-widest">ADVERTISEMENT</CardTitle>
+              <Card className="border-dashed border-primary/50 bg-card overflow-hidden">
+                <CardHeader className="p-4">
+                  <CardTitle className="text-center text-muted-foreground font-normal text-xs tracking-widest">ADVERTISEMENT</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="bg-muted aspect-square w-full rounded-lg flex items-center justify-center">
-                    <p className="text-muted-foreground text-lg">Ad Space</p>
-                  </div>
+                <CardContent className="p-0">
+                   <div className="aspect-square w-full relative">
+                     <Image 
+                       src="https://placehold.co/400x400.png" 
+                       alt="Advertisement"
+                       layout="fill"
+                       objectFit="cover"
+                       data-ai-hint="abstract technology"
+                     />
+                   </div>
+                   <div className="p-4 text-center">
+                      <h4 className="text-lg font-bold text-primary">Experience Nitro-Boost</h4>
+                      <p className="text-sm text-muted-foreground mt-2">Blazing fast internet for seamless streaming and downloads. Upgrade today!</p>
+                      <Button size="sm" className="mt-4 w-full">
+                         <Zap className="mr-2"/> Learn More
+                      </Button>
+                   </div>
                 </CardContent>
               </Card>
             </div>
