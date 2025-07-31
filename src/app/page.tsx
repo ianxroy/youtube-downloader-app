@@ -99,7 +99,7 @@ export default function Home() {
         ? videoInfo.formats.mp3[0].itag.toString()
         : selectedQuality;
 
-    const downloadApiUrl = `/api/youtube?url=${encodeURIComponent(url)}&format=${selectedFormat}&quality=${quality}`;
+    const downloadApiUrl = `/api/download?url=${encodeURIComponent(url)}&format=${selectedFormat}&quality=${quality}`;
     
     // Use window.location to trigger download
     window.location.href = downloadApiUrl;
