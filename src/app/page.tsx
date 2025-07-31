@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -12,35 +13,75 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import gsap from "gsap";
+import { getYoutubeVideoInfo, downloadYoutubeVideo, YoutubeVideoInfo } from "@/ai/flows/youtube";
+import { useToast } from "@/hooks/use-toast";
 
 type Step = "idle" | "fetching" | "select" | "downloading" | "done";
-
-const mockVideoData = {
-  title: "lofi hip hop radio - beats to relax/study to",
-  thumbnail: "https://placehold.co/1280x720.png",
-  duration: "2:34:12",
-};
 
 export default function Home() {
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<Step>("idle");
   const [progress, setProgress] = useState(0);
   const [selectedFormat, setSelectedFormat] = useState("mp4");
-  
+  const [videoInfo, setVideoInfo] = useState<YoutubeVideoInfo | null>(null);
+  const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadFilename, setDownloadFilename] = useState<string | null>(null);
+
+  const { toast } = useToast();
   const resultsRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
-  const handleFetch = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleFetch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!url.trim()) return;
     setStep("fetching");
-    setTimeout(() => {
+    try {
+      const info = await getYoutubeVideoInfo({ url });
+      setVideoInfo(info);
+      setSelectedQuality(info.formats.mp4[0]?.qualityLabel || null);
       setStep("select");
-    }, 2000);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error fetching video",
+        description: "Could not fetch video details. Please check the URL and try again.",
+        variant: "destructive",
+      });
+      setStep("idle");
+    }
   };
   
-  const handleDownload = () => {
+  const handleDownload = async () => {
+    if (!videoInfo || !selectedFormat || (selectedFormat === 'mp4' && !selectedQuality)) {
+        toast({
+            title: "Selection required",
+            description: "Please select a format and quality.",
+            variant: "destructive",
+        });
+        return;
+    }
     setStep("downloading");
+    setProgress(0);
+    try {
+        const result = await downloadYoutubeVideo({ 
+            url, 
+            format: selectedFormat as 'mp4' | 'mp3',
+            quality: selectedQuality 
+        });
+        setDownloadUrl(result.dataUri);
+        setDownloadFilename(result.filename);
+        setStep("done");
+    } catch (error) {
+        console.error(error);
+        toast({
+            title: "Download failed",
+            description: "An error occurred during the download process. Please try again.",
+            variant: "destructive",
+        });
+        setStep("select");
+    }
   };
 
   const handleReset = () => {
@@ -48,6 +89,10 @@ export default function Home() {
     setStep("idle");
     setProgress(0);
     setSelectedFormat("mp4");
+    setVideoInfo(null);
+    setSelectedQuality(null);
+    setDownloadUrl(null);
+    setDownloadFilename(null);
   };
 
   useEffect(() => {
@@ -57,22 +102,29 @@ export default function Home() {
   }, [step]);
   
   useEffect(() => {
+    // Fake progress for downloading feel
     if (step === 'downloading') {
       gsap.fromTo(progressRef.current, { opacity: 0 }, { opacity: 1, duration: 0.5 });
       const timer = setInterval(() => {
         setProgress((prev) => {
-          if (prev >= 100) {
+          if (prev >= 95) { // Stop at 95 to wait for actual download link
             clearInterval(timer);
-            setStep('done');
-            return 100;
+            return 95;
           }
           return prev + 1;
         });
-      }, 50);
+      }, 100);
 
       return () => clearInterval(timer);
     }
   }, [step]);
+
+  useEffect(() => {
+    if (step === 'done' && downloadUrl && downloadLinkRef.current) {
+        setProgress(100);
+        downloadLinkRef.current.click();
+    }
+  }, [step, downloadUrl]);
 
   return (
     <div className="flex flex-col min-h-screen bg-background font-body">
@@ -104,7 +156,7 @@ export default function Home() {
                       required
                       aria-label="YouTube URL"
                     />
-                    <Button type="submit" size="lg">
+                    <Button type="submit" size="lg" disabled={!url.trim()}>
                       Fetch Video <ArrowRight className="ml-2" />
                     </Button>
                   </form>
@@ -117,12 +169,12 @@ export default function Home() {
                   </div>
                 )}
                 
-                {(step === 'select' || step === 'downloading' || step === 'done') && (
+                {(step === 'select' || step === 'downloading' || step === 'done') && videoInfo && (
                   <div ref={resultsRef}>
                     <div className="flex flex-col md:flex-row gap-6 items-center">
                        <div className="md:w-1/3 flex-shrink-0">
                         <Image
-                          src={mockVideoData.thumbnail}
+                          src={videoInfo.thumbnail}
                           alt="Video thumbnail"
                           width={1280}
                           height={720}
@@ -131,8 +183,8 @@ export default function Home() {
                         />
                       </div>
                       <div className="md:w-2/3">
-                        <h3 className="text-xl font-semibold leading-tight">{mockVideoData.title}</h3>
-                        <p className="text-muted-foreground mt-1">Duration: {mockVideoData.duration}</p>
+                        <h3 className="text-xl font-semibold leading-tight">{videoInfo.title}</h3>
+                        <p className="text-muted-foreground mt-1">Duration: {videoInfo.duration}</p>
                       </div>
                     </div>
                     
@@ -145,12 +197,12 @@ export default function Home() {
                       </TabsList>
                       <TabsContent value="mp4" className="mt-4">
                         <Label>Select Quality:</Label>
-                        <RadioGroup defaultValue="720p" className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-                          {['1080p', '720p', '480p', '360p'].map(q => (
-                             <div key={q}>
-                               <RadioGroupItem value={q} id={`q-${q}`} className="peer sr-only" />
-                               <Label htmlFor={`q-${q}`} className="cursor-pointer flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                 {q}
+                        <RadioGroup value={selectedQuality || ''} onValueChange={setSelectedQuality} className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+                          {videoInfo.formats.mp4.map(q => (
+                             <div key={q.itag}>
+                               <RadioGroupItem value={q.qualityLabel} id={`q-${q.itag}`} className="peer sr-only" />
+                               <Label htmlFor={`q-${q.itag}`} className="cursor-pointer flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                                 {q.qualityLabel}
                                </Label>
                              </div>
                           ))}
@@ -163,7 +215,7 @@ export default function Home() {
 
                     <div className="mt-6 text-center" ref={progressRef}>
                       {step === 'select' && (
-                         <Button onClick={handleDownload} size="lg" className="w-full md:w-auto transition-all duration-300 transform hover:scale-105">
+                         <Button onClick={handleDownload} size="lg" className="w-full md:w-auto transition-all duration-300 transform hover:scale-105" disabled={selectedFormat === 'mp4' && !selectedQuality}>
                             <Download className="mr-2" /> Start Download
                          </Button>
                       )}
@@ -176,6 +228,7 @@ export default function Home() {
                       {step === 'done' && (
                          <div className="flex flex-col items-center gap-4">
                           <p className="text-xl font-bold text-foreground">Download Ready!</p>
+                           <a ref={downloadLinkRef} href={downloadUrl!} download={downloadFilename!} className="hidden">Download</a>
                            <Button onClick={handleReset} size="lg" variant="outline" className="w-full md:w-auto">
                              Download Another Video
                            </Button>
@@ -212,3 +265,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
