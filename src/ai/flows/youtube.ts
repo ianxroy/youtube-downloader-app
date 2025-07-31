@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview A Genkit flow for interacting with YouTube.
+ * @fileOverview Functions for interacting with YouTube.
  *
  * - getYoutubeVideoInfo - A function that returns metadata for a YouTube video.
  * - downloadYoutubeVideo - A function that downloads a YouTube video as MP4 or MP3.
@@ -10,8 +10,7 @@
  * - DownloadYoutubeVideoOutput - The return type for the downloadYoutubeVideo function.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import ytdl from 'ytdl-core';
 
 const YoutubeInputSchema = z.object({
@@ -32,16 +31,7 @@ export type YoutubeVideoInfo = z.infer<typeof YoutubeVideoInfoSchema>;
 export async function getYoutubeVideoInfo(
   input: z.infer<typeof YoutubeInputSchema>
 ): Promise<YoutubeVideoInfo> {
-  return getYoutubeVideoInfoFlow(input);
-}
-
-const getYoutubeVideoInfoFlow = ai.defineFlow(
-  {
-    name: 'getYoutubeVideoInfoFlow',
-    inputSchema: YoutubeInputSchema,
-    outputSchema: YoutubeVideoInfoSchema,
-  },
-  async ({ url }) => {
+    const { url } = YoutubeInputSchema.parse(input);
     const info = await ytdl.getInfo(url);
     const mp4Formats = ytdl
       .filterFormats(info.formats, 'videoandaudio')
@@ -62,7 +52,7 @@ const getYoutubeVideoInfoFlow = ai.defineFlow(
       .toISOString()
       .substr(11, 8);
 
-    return {
+    const result = {
       title: info.videoDetails.title,
       thumbnail: info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
       duration,
@@ -71,17 +61,18 @@ const getYoutubeVideoInfoFlow = ai.defineFlow(
         mp3: mp3Formats,
       },
     };
-  }
-);
+    
+    return YoutubeVideoInfoSchema.parse(result);
+}
 
-export const DownloadYoutubeVideoInputSchema = z.object({
+const DownloadYoutubeVideoInputSchema = z.object({
   url: z.string().url(),
   format: z.enum(['mp4', 'mp3']),
   quality: z.string().nullable(),
 });
 export type DownloadYoutubeVideoInput = z.infer<typeof DownloadYoutubeVideoInputSchema>;
 
-export const DownloadYoutubeVideoOutputSchema = z.object({
+const DownloadYoutubeVideoOutputSchema = z.object({
   dataUri: z.string(),
   filename: z.string(),
 });
@@ -90,16 +81,7 @@ export type DownloadYoutubeVideoOutput = z.infer<typeof DownloadYoutubeVideoOutp
 export async function downloadYoutubeVideo(
   input: DownloadYoutubeVideoInput
 ): Promise<DownloadYoutubeVideoOutput> {
-  return downloadYoutubeVideoFlow(input);
-}
-
-const downloadYoutubeVideoFlow = ai.defineFlow(
-  {
-    name: 'downloadYoutubeVideoFlow',
-    inputSchema: DownloadYoutubeVideoInputSchema,
-    outputSchema: DownloadYoutubeVideoOutputSchema,
-  },
-  async ({ url, format, quality }) => {
+    const { url, format, quality } = DownloadYoutubeVideoInputSchema.parse(input);
     const info = await ytdl.getInfo(url);
     const title = info.videoDetails.title.replace(/[^a-zA-Z0-9\s]/g, '');
 
@@ -122,11 +104,10 @@ const downloadYoutubeVideoFlow = ai.defineFlow(
     const mimeType = format === 'mp4' ? 'video/mp4' : 'audio/mpeg';
     const filename = `${title}.${format}`;
 
-    return {
+    const result = {
       dataUri: `data:${mimeType};base64,${buffer.toString('base64')}`,
       filename: filename,
     };
-  }
-);
 
-    
+    return DownloadYoutubeVideoOutputSchema.parse(result);
+}
