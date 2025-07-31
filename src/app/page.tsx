@@ -13,8 +13,17 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import gsap from "gsap";
-import { getYoutubeVideoInfo, downloadYoutubeVideo, YoutubeVideoInfo } from "@/ai/flows/youtube";
 import { useToast } from "@/hooks/use-toast";
+
+type YoutubeVideoInfo = {
+  title: string;
+  thumbnail: string;
+  duration: string;
+  formats: {
+    mp4: { itag: number; qualityLabel: string }[];
+    mp3: { itag: number; audioBitrate: number }[];
+  };
+};
 
 type Step = "idle" | "fetching" | "select" | "downloading" | "done";
 
@@ -25,8 +34,6 @@ export default function Home() {
   const [selectedFormat, setSelectedFormat] = useState("mp4");
   const [videoInfo, setVideoInfo] = useState<YoutubeVideoInfo | null>(null);
   const [selectedQuality, setSelectedQuality] = useState<string | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [downloadFilename, setDownloadFilename] = useState<string | null>(null);
 
   const { toast } = useToast();
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -38,15 +45,28 @@ export default function Home() {
     if (!url.trim()) return;
     setStep("fetching");
     try {
-      const info = await getYoutubeVideoInfo({ url });
+      const response = await fetch('/api/youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to fetch video info');
+      }
+      const info = await response.json();
       setVideoInfo(info);
-      setSelectedQuality(info.formats.mp4[0]?.qualityLabel || null);
+      if (info.formats.mp4.length > 0) {
+        setSelectedQuality(info.formats.mp4[0].itag.toString());
+      } else {
+        setSelectedQuality(null);
+      }
       setStep("select");
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       toast({
         title: "Error fetching video",
-        description: "Could not fetch video details. Please check the URL and try again.",
+        description: error.message || "Could not fetch video details. Please check the URL and try again.",
         variant: "destructive",
       });
       setStep("idle");
@@ -54,7 +74,7 @@ export default function Home() {
   };
   
   const handleDownload = async () => {
-    if (!videoInfo || !selectedFormat || (selectedFormat === 'mp4' && !selectedQuality)) {
+    if (!videoInfo || !selectedFormat || !selectedQuality) {
         toast({
             title: "Selection required",
             description: "Please select a format and quality.",
@@ -63,25 +83,32 @@ export default function Home() {
         return;
     }
     setStep("downloading");
-    setProgress(0);
-    try {
-        const result = await downloadYoutubeVideo({ 
-            url, 
-            format: selectedFormat as 'mp4' | 'mp3',
-            quality: selectedQuality 
+
+    const quality = selectedFormat === 'mp3' 
+        ? videoInfo.formats.mp3[0].itag.toString()
+        : selectedQuality;
+
+    const downloadApiUrl = `/api/youtube?url=${encodeURIComponent(url)}&format=${selectedFormat}&quality=${quality}`;
+    
+    // Use window.location to trigger download
+    window.location.href = downloadApiUrl;
+
+    // We can't track progress perfectly, so we'll simulate it and then assume success.
+    const timer = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 95) {
+            clearInterval(timer);
+            return 95;
+          }
+          return prev + 5;
         });
-        setDownloadUrl(result.dataUri);
-        setDownloadFilename(result.filename);
+      }, 500);
+
+    setTimeout(() => {
+        clearInterval(timer);
+        setProgress(100);
         setStep("done");
-    } catch (error) {
-        console.error(error);
-        toast({
-            title: "Download failed",
-            description: "An error occurred during the download process. Please try again.",
-            variant: "destructive",
-        });
-        setStep("select");
-    }
+    }, 10000); // Assume download is initiated after 10s
   };
 
   const handleReset = () => {
@@ -91,8 +118,6 @@ export default function Home() {
     setSelectedFormat("mp4");
     setVideoInfo(null);
     setSelectedQuality(null);
-    setDownloadUrl(null);
-    setDownloadFilename(null);
   };
 
   useEffect(() => {
@@ -102,29 +127,21 @@ export default function Home() {
   }, [step]);
   
   useEffect(() => {
-    // Fake progress for downloading feel
     if (step === 'downloading') {
       gsap.fromTo(progressRef.current, { opacity: 0 }, { opacity: 1, duration: 0.5 });
-      const timer = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 95) { // Stop at 95 to wait for actual download link
-            clearInterval(timer);
-            return 95;
-          }
-          return prev + 1;
-        });
-      }, 100);
-
-      return () => clearInterval(timer);
     }
   }, [step]);
 
   useEffect(() => {
-    if (step === 'done' && downloadUrl && downloadLinkRef.current) {
-        setProgress(100);
-        downloadLinkRef.current.click();
+    if (selectedFormat === 'mp4' && videoInfo?.formats.mp4.length) {
+        setSelectedQuality(videoInfo.formats.mp4[0].itag.toString());
+    } else if (selectedFormat === 'mp3' && videoInfo?.formats.mp3.length) {
+        setSelectedQuality(videoInfo.formats.mp3[0].itag.toString());
+    } else {
+        setSelectedQuality(null);
     }
-  }, [step, downloadUrl]);
+  }, [selectedFormat, videoInfo]);
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background font-body">
@@ -200,7 +217,7 @@ export default function Home() {
                         <RadioGroup value={selectedQuality || ''} onValueChange={setSelectedQuality} className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
                           {videoInfo.formats.mp4.map(q => (
                              <div key={q.itag}>
-                               <RadioGroupItem value={q.qualityLabel} id={`q-${q.itag}`} className="peer sr-only" />
+                               <RadioGroupItem value={q.itag.toString()} id={`q-${q.itag}`} className="peer sr-only" />
                                <Label htmlFor={`q-${q.itag}`} className="cursor-pointer flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
                                  {q.qualityLabel}
                                </Label>
@@ -215,7 +232,7 @@ export default function Home() {
 
                     <div className="mt-6 text-center" ref={progressRef}>
                       {step === 'select' && (
-                         <Button onClick={handleDownload} size="lg" className="w-full md:w-auto transition-all duration-300 transform hover:scale-105" disabled={selectedFormat === 'mp4' && !selectedQuality}>
+                         <Button onClick={handleDownload} size="lg" className="w-full md:w-auto transition-all duration-300 transform hover:scale-105" disabled={!selectedQuality}>
                             <Download className="mr-2" /> Start Download
                          </Button>
                       )}
@@ -227,8 +244,7 @@ export default function Home() {
                       )}
                       {step === 'done' && (
                          <div className="flex flex-col items-center gap-4">
-                          <p className="text-xl font-bold text-foreground">Download Ready!</p>
-                           <a ref={downloadLinkRef} href={downloadUrl!} download={downloadFilename!} className="hidden">Download</a>
+                          <p className="text-xl font-bold text-foreground">Download Complete!</p>
                            <Button onClick={handleReset} size="lg" variant="outline" className="w-full md:w-auto">
                              Download Another Video
                            </Button>
@@ -265,5 +281,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
