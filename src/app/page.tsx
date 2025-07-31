@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Music, ArrowRight, Loader2, Download, Video, AudioFile } from "lucide-react";
+import { Music, ArrowRight, Loader2, Download, Video, AudioLines } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -141,7 +141,7 @@ export default function Home() {
                     <Tabs value={selectedFormat} onValueChange={setSelectedFormat} className="w-full">
                       <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="mp4"><Video className="mr-2"/>MP4</TabsTrigger>
-                        <TabsTrigger value="mp3"><AudioFile className="mr-2"/>MP3</TabsTrigger>
+                        <TabsTrigger value="mp3"><AudioLines className="mr-2"/>MP3</TabsTrigger>
                       </TabsList>
                       <TabsContent value="mp4" className="mt-4">
                         <Label>Select Quality:</Label>
