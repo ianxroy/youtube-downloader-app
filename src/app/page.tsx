@@ -27,6 +27,8 @@ type YoutubeVideoInfo = {
 
 type Step = "idle" | "fetching" | "select" | "downloading" | "done";
 
+const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/;
+
 export default function Home() {
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<Step>("idle");
@@ -42,6 +44,16 @@ export default function Home() {
   const handleFetch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!url.trim()) return;
+
+    if (!YOUTUBE_URL_REGEX.test(url)) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube video URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setStep("fetching");
     try {
       const response = await fetch('/api/youtube', {
